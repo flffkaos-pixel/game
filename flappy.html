@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>플래피 버드 - Flappy Bird</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(180deg, #87ceeb 0%, #e0f6ff 100%);
+            margin: 0;
+            font-family: 'Noto Sans KR', sans-serif;
+            overflow: hidden;
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        #gameCanvas {
+            border: 4px solid #ff6b35;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .score { color: #ff6b35; font-size: 1.5rem; margin-bottom: 10px; font-weight: bold; }
+        .controls { color: #666; margin-top: 15px; }
+        a { color: #ff6b35; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>🐤 플래피 버드</h1>
+    <div class="score">점수: <span id="score">0</span></div>
+    <canvas id="gameCanvas" width="320" height="480"></canvas>
+    <div class="controls">스페이스바 or 탭: 점프 | <a href="index.html">← 메인으로</a></div>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        
+        let bird = { x: 50, y: 200, vy: 0, radius: 15 };
+        let pipes = [];
+        let score = 0;
+        let gameLoop;
+        let isPaused = false;
+        let isGameOver = false;
+        
+        function init() {
+            document.addEventListener('keydown', e => {
+                if (e.key === ' ' || e.key === 'Tab') {
+                    e.preventDefault();
+                    if (isGameOver) reset();
+                    else jump();
+                }
+            });
+            canvas.addEventListener('click', () => {
+                if (isGameOver) reset();
+                else jump();
+            });
+            gameLoop = setInterval(update, 30);
+        }
+        
+        function jump() {
+            if (!isPaused && !isGameOver) bird.vy = -8;
+        }
+        
+        function reset() {
+            bird = { x: 50, y: 200, vy: 0, radius: 15 };
+            pipes = [];
+            score = 0;
+            scoreEl.textContent = score;
+            isGameOver = false;
+            isPaused = false;
+        }
+        
+        function update() {
+            if (isPaused || isGameOver) { draw(); return; }
+            
+            bird.vy += 0.5;
+            bird.y += bird.vy;
+            
+            if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) {
+                gameOver();
+                return;
+            }
+            
+            if (pipes.length === 0 || pipes[pipes.length - 1].x < canvas.width - 150) {
+                pipes.push({
+                    x: canvas.width,
+                    gap: 120,
+                    topHeight: 80 + Math.random() * 120
+                });
+            }
+            
+            pipes.forEach((pipe, i) => {
+                pipe.x -= 3;
+                
+                if (pipe.x + 40 < 0) {
+                    pipes.splice(i, 1);
+                    score++;
+                    scoreEl.textContent = score;
+                }
+                
+                if (bird.x + bird.radius > pipe.x && bird.x - bird.radius < pipe.x + 40) {
+                    if (bird.y - bird.radius < pipe.topHeight || bird.y + bird.radius > pipe.topHeight + pipe.gap) {
+                        gameOver();
+                    }
+                }
+            });
+            
+            draw();
+        }
+        
+        function draw() {
+            ctx.fillStyle = '#87ceeb';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#8bc34a';
+            pipes.forEach(pipe => {
+                ctx.fillRect(pipe.x, 0, 40, pipe.topHeight);
+                ctx.fillRect(pipe.x, pipe.topHeight + pipe.gap, 40, canvas.height - pipe.topHeight - pipe.gap);
+            });
+            
+            ctx.fillStyle = '#ffeb3b';
+            ctx.beginPath();
+            ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(bird.x + 5, bird.y - 3, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (isGameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = '#fff';
+                ctx.font = '30px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('게임 오버!', canvas.width/2, canvas.height/2);
+                ctx.font = '18px sans-serif';
+                ctx.fillText('점수: ' + score, canvas.width/2, canvas.height/2 + 35);
+                ctx.fillText('스페이스바를 눌러 재시작', canvas.width/2, canvas.height/2 + 65);
+            }
+        }
+        
+        function gameOver() {
+            isGameOver = true;
+        }
+        
+        init();
+    </script>
+</body>
+</html>

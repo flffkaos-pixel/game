@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>우주 슈팅 게임</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #000;
+            margin: 0;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        #game-container { border: 4px solid #00ff00; border-radius: 10px; overflow: hidden; }
+        .back-link {
+            color: #00ff00;
+            text-decoration: none;
+            margin-top: 15px;
+            font-size: 1.2rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <a href="index.html" class="back-link">← 메인으로</a>
+
+    <script>
+    const config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        parent: 'game-container',
+        backgroundColor: '#000011',
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    const game = new Phaser.Game(config);
+
+    let player;
+    let cursors;
+    let bullets;
+    let enemies;
+    let score = 0;
+    let scoreText;
+    let gameOver = false;
+    let lastFired = 0;
+    let stars;
+    let explosions;
+
+    function preload() {
+        // 플레이어 우주선 (그래픽으로 생성)
+        let graphics = this.make.graphics({ x: 0, y: 0, add: false });
+        
+        // 우주선 스프라이트 생성
+        graphics.clear();
+        graphics.fillStyle(0x00ff00, 1);
+        graphics.beginPath();
+        graphics.moveTo(20, 0);
+        graphics.lineTo(40, 40);
+        graphics.lineTo(20, 30);
+        graphics.lineTo(0, 40);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.generateTexture('player', 40, 40);
+        
+        // 총알
+        graphics.clear();
+        graphics.fillStyle(0xffff00, 1);
+        graphics.fillRect(0, 0, 4, 12);
+        graphics.generateTexture('bullet', 4, 12);
+        
+        // 적 우주선
+        graphics.clear();
+        graphics.fillStyle(0xff0000, 1);
+        graphics.beginPath();
+        graphics.moveTo(20, 40);
+        graphics.lineTo(40, 0);
+        graphics.lineTo(20, 10);
+        graphics.lineTo(0, 0);
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.generateTexture('enemy', 40, 40);
+        
+        // 별
+        graphics.clear();
+        graphics.fillStyle(0xffffff, 1);
+        graphics.fillCircle(2, 2, 2);
+        graphics.generateTexture('star', 4, 4);
+        
+        // 폭발
+        graphics.clear();
+        graphics.fillStyle(0xffaa00, 1);
+        graphics.fillCircle(10, 10, 10);
+        graphics.generateTexture('explosion', 20, 20);
+        
+        graphics.destroy();
+    }
+
+    function create() {
+        // 별 배경
+        for (let i = 0; i < 100; i++) {
+            const x = Phaser.Math.Between(0, 800);
+            const y = Phaser.Math.Between(0, 600);
+            const star = this.add.image(x, y, 'star');
+            star.setAlpha(Phaser.Math.FloatBetween(0.1, 0.8));
+        }
+
+        // 플레이어
+        player = this.physics.add.sprite(400, 500, 'player');
+        player.setCollideWorldBounds(true);
+        
+        // 총알 그룹
+        bullets = this.physics.add.group();
+        
+        // 적 그룹
+        enemies = this.physics.add.group();
+        
+        // 적 생성 타이머
+        this.time.addEvent({
+            delay: 1000,
+            callback: spawnEnemy,
+            callbackScope: this,
+            loop: true
+        });
+        
+        // 키 입력
+        cursors = this.input.keyboard.createCursorKeys();
+        this.input.keyboard.on('keydown-SPACE', fireBullet, this);
+        
+        // 점수
+        scoreText = this.add.text(16, 16, '점수: 0', { 
+            fontSize: '32px', 
+            fill: '#00ff00',
+            fontFamily: 'Noto Sans KR'
+        });
+        
+        // 충돌 처리
+        this.physics.add.overlap(bullets, enemies, hitEnemy, null, this);
+        this.physics.add.overlap(player, enemies, hitPlayer, null, this);
+        
+        // 시작 메시지
+        const startText = this.add.text(400, 300, '방향키로 이동\n스페이스바로 발사\n\n스페이스바를 눌러 시작', {
+            fontSize: '28px',
+            fill: '#ffffff',
+            align: 'center',
+            fontFamily: 'Noto Sans KR'
+        });
+        startText.setOrigin(0.5);
+        
+        this.started = false;
+        this.startText = startText;
+        
+        this.input.keyboard.once('keydown-SPACE', () => {
+            this.started = true;
+            startText.destroy();
+        });
+    }
+
+    function update() {
+        if (!this.started || gameOver) return;
+        
+        // 플레이어 이동
+        if (cursors.left.isDown) {
+            player.setVelocityX(-300);
+        } else if (cursors.right.isDown) {
+            player.setVelocityX(300);
+        } else {
+            player.setVelocityX(0);
+        }
+        
+        if (cursors.up.isDown) {
+            player.setVelocityY(-300);
+        } else if (cursors.down.isDown) {
+            player.setVelocityY(300);
+        } else {
+            player.setVelocityY(0);
+        }
+        
+        // 총알 정리
+        bullets.children.each(function(b) {
+            if (b.y < -10) {
+                b.destroy();
+            }
+        });
+    }
+
+    function fireBullet() {
+        if (!this.started || gameOver) return;
+        
+        const now = this.time.now;
+        if (now - lastFired > 200) {
+            const bullet = bullets.create(player.x, player.y - 20, 'bullet');
+            bullet.setVelocityY(-400);
+            lastFired = now;
+        }
+    }
+
+    function spawnEnemy() {
+        if (!this.started || gameOver) return;
+        
+        const x = Phaser.Math.Between(50, 750);
+        const enemy = enemies.create(x, -40, 'enemy');
+        enemy.setVelocityY(Phaser.Math.Between(100, 200));
+        
+        // 화면 밖으로 나가면 제거
+        this.time.addEvent({
+            delay: 5000,
+            callback: () => { if (enemy.active) enemy.destroy(); }
+        });
+    }
+
+    function hitEnemy(bullet, enemy) {
+        bullet.destroy();
+        enemy.destroy();
+        score += 10;
+        scoreText.setText('점수: ' + score);
+        
+        // 폭발 효과
+        const explosion = this.add.image(enemy.x, enemy.y, 'explosion');
+        this.tweens.add({
+            targets: explosion,
+            alpha: 0,
+            scale: 2,
+            duration: 300,
+            onComplete: () => explosion.destroy()
+        });
+    }
+
+    function hitPlayer(player, enemy) {
+        enemy.destroy();
+        gameOver = true;
+        
+        this.physics.pause();
+        player.setTint(0xff0000);
+        
+        const gameOverText = this.add.text(400, 250, '게임 오버!', {
+            fontSize: '64px',
+            fill: '#ff0000',
+            fontFamily: 'Noto Sans KR'
+        });
+        gameOverText.setOrigin(0.5);
+        
+        const scoreText2 = this.add.text(400, 330, '최종 점수: ' + score, {
+            fontSize: '32px',
+            fill: '#ffffff',
+            fontFamily: 'Noto Sans KR'
+        });
+        scoreText2.setOrigin(0.5);
+        
+        const restartText = this.add.text(400, 420, '새로고침하여 재시작', {
+            fontSize: '24px',
+            fill: '#00ff00',
+            fontFamily: 'Noto Sans KR'
+        });
+        restartText.setOrigin(0.5);
+    }
+    </script>
+</body>
+</html>

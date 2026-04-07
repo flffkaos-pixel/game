@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>벽돌깨기 - Breakout</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+            margin: 0;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        h1 { color: #fff; margin-bottom: 10px; }
+        #gameCanvas {
+            border: 3px solid #3498db;
+            border-radius: 10px;
+            box-shadow: 0 0 30px rgba(52, 152, 219, 0.3);
+        }
+        .score { color: #3498db; font-size: 1.5rem; margin-bottom: 10px; }
+        .controls { color: #aaa; margin-top: 15px; }
+        a { color: #3498db; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <h1>🏀 벽돌깨기</h1>
+    <div class="score">점수: <span id="score">0</span></div>
+    <canvas id="gameCanvas" width="480" height="320"></canvas>
+    <div class="controls">좌우화살표: 패들 이동 | <a href="index.html">← 메인으로</a></div>
+    
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        
+        const paddle = { x: 200, y: 290, w: 80, h: 10, speed: 7 };
+        const ball = { x: 240, y: 200, r: 8, dx: 3, dy: -3 };
+        const brick = { rows: 4, cols: 8, w: 50, h: 20, padding: 5, offsetTop: 40, offsetLeft: 25 };
+        
+        let bricks = [];
+        let score = 0;
+        let gameLoop;
+        let leftPressed = false;
+        let rightPressed = false;
+        
+        function initBricks() {
+            bricks = [];
+            for (let r = 0; r < brick.rows; r++) {
+                bricks[r] = [];
+                for (let c = 0; c < brick.cols; c++) {
+                    bricks[r][c] = { x: 0, y: 0, status: 1 };
+                }
+            }
+        }
+        
+        function init() {
+            initBricks();
+            document.addEventListener('keydown', e => {
+                if (e.key === 'ArrowRight') rightPressed = true;
+                if (e.key === 'ArrowLeft') leftPressed = true;
+            });
+            document.addEventListener('keyup', e => {
+                if (e.key === 'ArrowRight') rightPressed = false;
+                if (e.key === 'ArrowLeft') leftPressed = false;
+            });
+            gameLoop = setInterval(update, 15);
+        }
+        
+        function update() {
+            if (rightPressed && paddle.x < canvas.width - paddle.w) paddle.x += paddle.speed;
+            if (leftPressed && paddle.x > 0) paddle.x -= paddle.speed;
+            
+            ball.x += ball.dx;
+            ball.y += ball.dy;
+            
+            if (ball.x + ball.r > canvas.width || ball.x - ball.r < 0) ball.dx = -ball.dx;
+            if (ball.y - ball.r < 0) ball.dy = -ball.dy;
+            if (ball.y + ball.r > canvas.height) {
+                gameOver();
+                return;
+            }
+            
+            if (ball.x > paddle.x && ball.x < paddle.x + paddle.w && ball.y + ball.r > paddle.y) {
+                ball.dy = -Math.abs(ball.dy);
+                ball.dx = (ball.x - paddle.x - paddle.w/2) * 0.1;
+            }
+            
+            for (let r = 0; r < brick.rows; r++) {
+                for (let c = 0; c < brick.cols; c++) {
+                    const b = bricks[r][c];
+                    if (b.status === 1) {
+                        const bx = brick.offsetLeft + c * (brick.w + brick.padding);
+                        const by = brick.offsetTop + r * (brick.h + brick.padding);
+                        b.x = bx;
+                        b.y = by;
+                        
+                        if (ball.x > bx && ball.x < bx + brick.w && ball.y > by && ball.y < by + brick.h) {
+                            ball.dy = -ball.dy;
+                            b.status = 0;
+                            score += 10;
+                            scoreEl.textContent = score;
+                            
+                            if (score === brick.rows * brick.cols * 10) {
+                                win();
+                            }
+                        }
+                    }
+                }
+            }
+            
+            draw();
+        }
+        
+        function draw() {
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            const colors = ['#e74c3c', '#e67e22', '#f1c40f', '#2ecc71'];
+            for (let r = 0; r < brick.rows; r++) {
+                for (let c = 0; c < brick.cols; c++) {
+                    if (bricks[r][c].status === 1) {
+                        ctx.fillStyle = colors[r];
+                        ctx.fillRect(brick.offsetLeft + c * (brick.w + brick.padding), 
+                                    brick.offsetTop + r * (brick.h + brick.padding), brick.w, brick.h);
+                    }
+                }
+            }
+            
+            ctx.fillStyle = '#3498db';
+            ctx.fillRect(paddle.x, paddle.y, paddle.w, paddle.h);
+            
+            ctx.fillStyle = '#ecf0f1';
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        function gameOver() {
+            clearInterval(gameLoop);
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fff';
+            ctx.font = '30px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('게임 오버!', canvas.width/2, canvas.height/2);
+        }
+        
+        function win() {
+            clearInterval(gameLoop);
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#2ecc71';
+            ctx.font = '30px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('승리! 클리어!', canvas.width/2, canvas.height/2);
+        }
+        
+        init();
+    </script>
+</body>
+</html>
