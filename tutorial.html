@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phaser 튜토리얼 게임</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #1a1a2e;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Noto Sans KR', sans-serif;
+        }
+        #game-container { border: 4px solid #00ff96; border-radius: 10px; overflow: hidden; }
+        .info { color: #00ff96; margin: 15px 0; font-size: 1.5rem; font-weight: bold; }
+        a { color: #00ff96; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div id="game-container"></div>
+    <div class="info" id="scoreDisplay">점수: 0</div>
+    <a href="index.html">← 메인으로</a>
+
+    <script>
+    class TutorialScene extends Phaser.Scene {
+        constructor() {
+            super({ key: 'TutorialScene' });
+        }
+
+        preload() {
+            // 플랫폼 (땅과 블록)
+            const g = this.make.graphics({ x: 0, y: 0, add: false });
+            g.fillStyle(0x00ff96, 1);
+            g.fillRect(0, 0, 800, 20); // 땅
+            g.generateTexture('ground', 800, 20);
+            
+            g.clear();
+            g.fillStyle(0x00ff96, 1);
+            g.fillRect(0, 0, 200, 20); // 플랫폼
+            g.generateTexture('platform', 200, 20);
+            
+            // 플레이어 (파란 원)
+            g.clear();
+            g.fillStyle(0x3498db, 1);
+            g.fillCircle(15, 15, 15);
+            g.generateTexture('player', 30, 30);
+            
+            // 별 (노란 별)
+            g.clear();
+            g.fillStyle(0xffeb3b, 1);
+            g.beginPath();
+            g.moveTo(24, 0);
+            g.lineTo(27, 14);
+            g.lineTo(40, 14);
+            g.lineTo(29, 21);
+            g.lineTo(32, 34);
+            g.lineTo(24, 24);
+            g.lineTo(16, 34);
+            g.lineTo(19, 21);
+            g.lineTo(8, 14);
+            g.lineTo(21, 14);
+            g.lineTo(24, 0);
+            g.closePath();
+            g.fillPath();
+            g.generateTexture('star', 40, 40);
+            
+            // 적 (빨간 가시)
+            g.clear();
+            g.fillStyle(0xe74c3c, 1);
+            g.beginPath();
+            g.moveTo(10, 0);
+            g.lineTo(20, 30);
+            g.lineTo(0, 30);
+            g.closePath();
+            g.fillPath();
+            g.generateTexture('enemy', 30, 30);
+            
+            g.destroy();
+        }
+
+        create() {
+            // 점수
+            this.score = 0;
+            this.scoreText = document.getElementById('scoreDisplay');
+            
+            // 플랫폼 그룹
+            this.platforms = this.physics.add.staticGroup();
+            this.platforms.create(400, 560, 'ground').setScale(2).refreshBody();
+            this.platforms.create(600, 400, 'platform');
+            this.platforms.create(50, 250, 'platform');
+            this.platforms.create(750, 150, 'platform');
+            
+            // 플레이어
+            this.player = this.physics.add.sprite(100, 450, 'player');
+            this.player.setBounce(0.2);
+            this.player.setCollideWorldBounds(true);
+            
+            // 별 그룹
+            this.stars = this.physics.add.group({
+                key: 'star',
+                repeat: 7,
+                setXY: { x: 12, y: 0, stepX: 100 }
+            });
+            
+            this.stars.children.iterate(function (child) {
+                child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+                child.setCollideWorldBounds(true);
+            });
+            
+            // 적 그룹
+            this.enemies = this.physics.add.group();
+            this.enemies.create(400, 200, 'enemy').setBounce(1).setCollideWorldBounds(true).setVelocity(100, 20).setGravityY(200);
+            this.enemies.create(600, 100, 'enemy').setBounce(1).setCollideWorldBounds(true).setVelocity(-100, 20).setGravityY(200);
+            this.enemies.create(200, 50, 'enemy').setBounce(1).setCollideWorldBounds(true).setVelocity(150, 20).setGravityY(200);
+            
+            // 키
+            this.cursors = this.input.keyboard.createCursorKeys();
+            
+            // 충돌
+            this.physics.add.collider(this.player, this.platforms);
+            this.physics.add.collider(this.stars, this.platforms);
+            this.physics.add.overlap(this.player, this.stars, this.collectStar, null, this);
+            this.physics.add.collider(this.enemies, this.platforms);
+            this.physics.add.overlap(this.player, this.enemies, this.hitEnemy, null, this);
+            
+            // 시작 메시지
+            this.startText = this.add.text(400, 300, '좌우로 이동\n위쪽 화살표 또는 스페이스로 점프\n\n키를 눌러 시작', {
+                fontSize: '24px',
+                fill: '#ffffff',
+                align: 'center',
+                fontFamily: 'Noto Sans KR'
+            }).setOrigin(0.5);
+            
+            this.gameStarted = false;
+            
+            this.input.keyboard.once('keydown', () => {
+                if (!this.gameStarted) {
+                    this.startGame();
+                }
+            });
+        }
+
+        startGame() {
+            this.gameStarted = true;
+            this.startText.setVisible(false);
+        }
+
+        collectStar(player, star) {
+            star.disableBody(true, true);
+            this.score += 10;
+            this.scoreText.textContent = '점수: ' + this.score;
+            
+            if (this.stars.countActive(true) === 0) {
+                this.stars.children.iterate(function (child) {
+                    child.enableBody(true, child.x, 0, true, true);
+                });
+                
+                var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+                
+                var bomb = this.enemies.create(x, 16, 'enemy');
+                bomb.setBounce(1);
+                bomb.setCollideWorldBounds(true);
+                bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+                bomb.setGravityY(200);
+            }
+        }
+
+        hitEnemy(player, enemy) {
+            this.physics.pause();
+            
+            this.player.setTint(0xff0000);
+            
+            this.startText.setText('게임 오버!\n점수: ' + this.score + '\n키를 눌러 재시작');
+            this.startText.setVisible(true);
+            
+            this.input.keyboard.once('keydown', () => {
+                this.scene.restart();
+            });
+        }
+
+        update() {
+            if (!this.gameStarted) return;
+            
+            if (this.cursors.left.isDown) {
+                this.player.setVelocityX(-160);
+            } else if (this.cursors.right.isDown) {
+                this.player.setVelocityX(160);
+            } else {
+                this.player.setVelocityX(0);
+            }
+            
+            if (this.cursors.up.isDown && this.player.body.touching.down) {
+                this.player.setVelocityY(-330);
+            }
+        }
+    }
+
+    const config = {
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        parent: 'game-container',
+        backgroundColor: '#1a1a2e',
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: 300 },
+                debug: false
+            }
+        },
+        scene: TutorialScene
+    };
+
+    new Phaser.Game(config);
+    </script>
+</body>
+</html>
